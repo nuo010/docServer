@@ -36,7 +36,7 @@ mvn -U clean package -DskipTests
 
 ### 1) 模板填充（上传）
 
-- URL: `POST /api/docs/fill-template`
+- URL: `POST /api/docs/fillTemplate`
 - Content-Type: `multipart/form-data`
 - 参数：
   - `template`: 模板文件（`.docx`）
@@ -46,7 +46,7 @@ mvn -U clean package -DskipTests
 示例：
 
 ```bash
-curl -X POST "http://localhost:8080/api/docs/fill-template" \
+curl -X POST "http://localhost:8080/api/docs/fillTemplate" \
   -F "template=@./template.docx" \
   -F 'variables={"name":"张三","amount":"1000"}'
 ```
@@ -54,7 +54,7 @@ curl -X POST "http://localhost:8080/api/docs/fill-template" \
 填充并直接下载 PDF：
 
 ```bash
-curl -X POST "http://localhost:8080/api/docs/fill-template?convertToPdf=true" \
+curl -X POST "http://localhost:8080/api/docs/fillTemplate?convertToPdf=true" \
   -F "template=@./template.docx" \
   -F 'variables={"name":"张三","amount":"1000"}' \
   --output filled.pdf
@@ -62,12 +62,12 @@ curl -X POST "http://localhost:8080/api/docs/fill-template?convertToPdf=true" \
 
 ### 1b) 模板填充（模板 http 直链）
 
-- URL: `POST /api/docs/fill-template-from-url`
+- URL: `POST /api/docs/fillTemplateFromUrl`
 - Content-Type: `application/json`
 - 请求体字段：`templateUrl`、`variables`；可选 `convertToPdf`（`true` 时返回 PDF）
 
 ```bash
-curl -X POST "http://localhost:8080/api/docs/fill-template-from-url" \
+curl -X POST "http://localhost:8080/api/docs/fillTemplateFromUrl" \
   -H "Content-Type: application/json" \
   -d '{"templateUrl":"https://example.com/t.docx","variables":{"ownerName":"张三"},"convertToPdf":true}' \
   -o filled.pdf
@@ -75,7 +75,7 @@ curl -X POST "http://localhost:8080/api/docs/fill-template-from-url" \
 
 ### 2) Word 转 PDF
 
-- URL: `POST /api/docs/word-to-pdf`
+- URL: `POST /api/docs/wordToPdf`
 - Content-Type: `multipart/form-data`
 - 参数：
   - `file`: Word 文件（`.doc` 或 `.docx`）
@@ -83,7 +83,7 @@ curl -X POST "http://localhost:8080/api/docs/fill-template-from-url" \
 示例：
 
 ```bash
-curl -X POST "http://localhost:8080/api/docs/word-to-pdf" \
+curl -X POST "http://localhost:8080/api/docs/wordToPdf" \
   -F "file=@./sample.docx" \
   --output converted.pdf
 ```

@@ -78,7 +78,7 @@ public class DocumentController {
         @ApiResponse(responseCode = "502", description = "选择转 PDF 时 LibreOffice 转换失败")
     })
     @PostMapping(
-        value = "/fill-template",
+        value = "/fillTemplate",
         consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
         produces = {
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -120,7 +120,7 @@ public class DocumentController {
         @ApiResponse(responseCode = "502", description = "模板链接不可达或转 PDF 失败")
     })
     @PostMapping(
-        value = "/fill-template-from-url",
+        value = "/fillTemplateFromUrl",
         consumes = MediaType.APPLICATION_JSON_VALUE,
         produces = {
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -147,7 +147,7 @@ public class DocumentController {
         @ApiResponse(responseCode = "400", description = "文档格式不支持或转换失败")
     })
     @PostMapping(
-        value = "/word-to-pdf",
+        value = "/wordToPdf",
         consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
         produces = MediaType.APPLICATION_PDF_VALUE
     )
