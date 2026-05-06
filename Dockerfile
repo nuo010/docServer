@@ -1,5 +1,16 @@
 ARG RUNTIME_IMAGE=eclipse-temurin:17.0.14_7-jre-jammy
 FROM ${RUNTIME_IMAGE}
+
+
+
+ENV TZ=Asia/Shanghai
+ARG LIBREOFFICE_VERSION=1:7.3.7-0ubuntu0.22.04.10
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libreoffice=${LIBREOFFICE_VERSION} \
+    && rm -rf /var/lib/apt/lists/*
+
+
 #ADD ./ /code
 ADD doc_server.jar /code/doc_server.jar
 ADD ./config /code/config
@@ -8,12 +19,7 @@ ADD ./config /code/config_back
 WORKDIR /code
 #VOLUME /logs
 #EXPOSE 8080
-ENV TZ=Asia/Shanghai
-ARG LIBREOFFICE_VERSION=1:7.3.7-0ubuntu0.22.04.10
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends libreoffice=${LIBREOFFICE_VERSION} \
-    && rm -rf /var/lib/apt/lists/*
 # 不同系统有兼容问题
 # RUN /bin/cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo 'Asia/Shanghai' >/etc/timezone
 
