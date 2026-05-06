@@ -2,7 +2,7 @@
 
 基于 Spring Boot 3.5.10 的文档处理服务，提供：
 
-- DOCX 模板填充（`{{变量名}}` 占位符，兼容旧版 `${变量名}`）
+- DOCX 模板填充（`{{变量名}}` 占位符，兼容旧版 `${变量名}`；可选填充后直接返回 PDF）
 - Word（`.doc` / `.docx`）转 PDF
 - Docker 镜像打包运行
 
@@ -34,13 +34,14 @@ mvn -U clean package -DskipTests
 
 ## API
 
-### 1) 模板填充
+### 1) 模板填充（上传）
 
 - URL: `POST /api/docs/fill-template`
 - Content-Type: `multipart/form-data`
 - 参数：
   - `template`: 模板文件（`.docx`）
   - `variables`: JSON 字符串，例如 `{"plateNum":"云A12345","ownerName":"张三"}`（与模板中 `{{plateNum}}`、`{{ownerName}}` 对应）
+  - `convertToPdf`（可选，默认 `false`）：为 `true` 时服务端填充后**直接转 PDF** 下载；可作为 **form 字段**或 **URL 查询参数**（如 `?convertToPdf=true`）
 
 示例：
 
@@ -48,6 +49,28 @@ mvn -U clean package -DskipTests
 curl -X POST "http://localhost:8080/api/docs/fill-template" \
   -F "template=@./template.docx" \
   -F 'variables={"name":"张三","amount":"1000"}'
+```
+
+填充并直接下载 PDF：
+
+```bash
+curl -X POST "http://localhost:8080/api/docs/fill-template?convertToPdf=true" \
+  -F "template=@./template.docx" \
+  -F 'variables={"name":"张三","amount":"1000"}' \
+  --output filled.pdf
+```
+
+### 1b) 模板填充（模板 http 直链）
+
+- URL: `POST /api/docs/fill-template-from-url`
+- Content-Type: `application/json`
+- 请求体字段：`templateUrl`、`variables`；可选 `convertToPdf`（`true` 时返回 PDF）
+
+```bash
+curl -X POST "http://localhost:8080/api/docs/fill-template-from-url" \
+  -H "Content-Type: application/json" \
+  -d '{"templateUrl":"https://example.com/t.docx","variables":{"ownerName":"张三"},"convertToPdf":true}' \
+  -o filled.pdf
 ```
 
 ### 2) Word 转 PDF
@@ -91,5 +114,6 @@ docker run --rm -p 8080:8080 doc-server:latest
 ## 注意事项
 
 - 模板填充当前是基础版替换逻辑，适合简单占位符场景。
+- **Word 里 2 页、转 PDF 变 3 页**：LibreOffice 与 Microsoft Word 不是同一套排版引擎；字体替换（如宋体→Noto）、行距/表格行高/分页规则不同都会导致页数变化。若必须与 Word 打印一致，只能在 Word 侧预留版面余量、统一使用容器内已安装字体（如 Noto CJK），或接受「先下 docx 用 Word 另存为 PDF」的流程。
 - 复杂样式/跨 run 占位符（Word 内部拆分）可在后续迭代中增强。
 - 转换能力依赖 LibreOffice；Docker 镜像中已安装 `fonts-noto-cjk` 与 `fontconfig`，避免 PDF 中文变成方框。

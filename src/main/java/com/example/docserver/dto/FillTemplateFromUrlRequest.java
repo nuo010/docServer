@@ -19,5 +19,12 @@ public record FillTemplateFromUrlRequest(
         example = "{\"plateNum\":\"云A12345\",\"plateColor\":\"黄色\",\"ownerName\":\"张三\"}"
     )
     @NotNull(message = "variables 不能为空")
-    Map<String, String> variables
+    Map<String, String> variables,
+
+    @Schema(
+        description = "为 true 时填充后由服务端直接转为 PDF 下载；省略或 false 则返回 Word（.docx）",
+        defaultValue = "false",
+        requiredMode = Schema.RequiredMode.NOT_REQUIRED
+    )
+    Boolean convertToPdf
 ) {}
