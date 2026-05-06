@@ -118,3 +118,8 @@ docker run --rm -p 8080:8080 doc-server:latest
 - 复杂样式/跨 run 占位符（Word 内部拆分）可在后续迭代中增强。
 - 转换能力依赖 LibreOffice；Docker 镜像中已安装 `fonts-noto-cjk` 与 `fontconfig`，避免 PDF 中文变成方框。
 - PDF 导出参数可在 `application.yml` 的 `doc.conversion.pdf` 下调整（如 `select-pdf-version`、`full-update-on-load`），改后需重启服务。
+
+
+
+
+如果转换格式有问题，或者 2 页转 pdf 后变成 3 也，请检查字符间距，字体，宋体 
