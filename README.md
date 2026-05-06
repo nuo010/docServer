@@ -117,3 +117,4 @@ docker run --rm -p 8080:8080 doc-server:latest
 - **Word 里 2 页、转 PDF 变 3 页**：LibreOffice 与 Microsoft Word 不是同一套排版引擎；字体替换、行距/表格行高/分页规则不同都会导致页数变化。服务端已对 PDF 导出开启 **嵌入标准字体**、**打开文档后完整 Update（FULL_UPDATE）** 等选项，能减轻部分差异，但**仍无法保证与 Word 逐页一致**。若必须与 Word 打印一致，请在模板中略留余量、统一使用镜像内字体（如 Noto CJK）、在 Word 中**嵌入字体**，或采用「先下 docx 用 Word 另存为 PDF」。
 - 复杂样式/跨 run 占位符（Word 内部拆分）可在后续迭代中增强。
 - 转换能力依赖 LibreOffice；Docker 镜像中已安装 `fonts-noto-cjk` 与 `fontconfig`，避免 PDF 中文变成方框。
+- PDF 导出参数可在 `application.yml` 的 `doc.conversion.pdf` 下调整（如 `select-pdf-version`、`full-update-on-load`），改后需重启服务。

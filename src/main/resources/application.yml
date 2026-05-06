@@ -13,3 +13,19 @@ springdoc:
 
 knife4j:
   enable: true
+
+# Word → PDF（LibreOffice）；可按环境微调，改后需重启
+doc:
+  conversion:
+    pdf:
+      # SelectPdfVersion：0 多为 PDF 1.4；与镜像中 LibreOffice 版本有关，异常时可改为 0
+      select-pdf-version: 2
+      # 打开文档后是否 FULL_UPDATE（略慢，有时改善分页）
+      full-update-on-load: true
+      embed-standard-fonts: true
+      use-tagged-pdf: false
+      export-bookmarks: true
+      export-form-fields: true
+      # JPEG 质量 1–100（仅当未使用无损压缩时明显）
+      quality: 95
+      use-lossless-compression: false
