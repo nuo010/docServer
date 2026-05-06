@@ -19,7 +19,21 @@
 
     <properties>
         <java.version>17</java.version>
+        <!-- Spring Boot 3.5 使用 Spring Framework 6.2，须 springdoc >= 2.8 才兼容 ControllerAdviceBean 变更；Knife4j 4.4.0 传递的旧版会触发 NoSuchMethodError -->
+        <springdoc.version>2.8.17</springdoc.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-bom</artifactId>
+                <version>${springdoc.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -36,6 +50,11 @@
             <groupId>com.github.xiaoymin</groupId>
             <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
             <version>4.4.0</version>
+        </dependency>
+        <!-- 与上面 BOM 配合：强制使用 2.8.x springdoc，避免 Knife4j 传递的旧版在 Spring 6.2 下崩溃 -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
         </dependency>
 
         <dependency>

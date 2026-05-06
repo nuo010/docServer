@@ -2,7 +2,7 @@
 
 基于 Spring Boot 3.5.10 的文档处理服务，提供：
 
-- DOCX 模板填充（`${变量名}` 占位符）
+- DOCX 模板填充（`{{变量名}}` 占位符，兼容旧版 `${变量名}`）
 - Word（`.doc` / `.docx`）转 PDF
 - Docker 镜像打包运行
 
@@ -40,7 +40,7 @@ mvn -U clean package -DskipTests
 - Content-Type: `multipart/form-data`
 - 参数：
   - `template`: 模板文件（`.docx`）
-  - `variables`: JSON 字符串，例如 `{"name":"张三","amount":"1000"}`
+  - `variables`: JSON 字符串，例如 `{"plateNum":"云A12345","ownerName":"张三"}`（与模板中 `{{plateNum}}`、`{{ownerName}}` 对应）
 
 示例：
 
@@ -92,4 +92,4 @@ docker run --rm -p 8080:8080 doc-server:latest
 
 - 模板填充当前是基础版替换逻辑，适合简单占位符场景。
 - 复杂样式/跨 run 占位符（Word 内部拆分）可在后续迭代中增强。
-- 转换能力依赖 LibreOffice，Docker 镜像中已内置。
+- 转换能力依赖 LibreOffice；Docker 镜像中已安装 `fonts-noto-cjk` 与 `fontconfig`，避免 PDF 中文变成方框。

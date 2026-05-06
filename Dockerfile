@@ -3,11 +3,18 @@ FROM ${RUNTIME_IMAGE}
 
 
 
-ENV TZ=Asia/Shanghai
+# UTF-8 避免 LibreOffice/日志中文异常；时区与业务一致
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 TZ=Asia/Shanghai
+
 ARG LIBREOFFICE_VERSION=1:7.3.7-0ubuntu0.22.04.10
 
+# fonts-noto-cjk：容器内默认无中文字体，转 PDF 会成「方框」；fontconfig + fc-cache 供 LibreOffice 识别字库
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libreoffice=${LIBREOFFICE_VERSION} \
+    && apt-get install -y --no-install-recommends \
+        libreoffice=${LIBREOFFICE_VERSION} \
+        fonts-noto-cjk \
+        fontconfig \
+    && fc-cache -fv \
     && rm -rf /var/lib/apt/lists/*
 
 
