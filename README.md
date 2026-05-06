@@ -2,7 +2,7 @@
 
 基于 Spring Boot 3.5.10 的文档处理服务，提供：
 
-- DOCX 模板填充（`{{变量名}}` 占位符，兼容旧版 `${变量名}`；可选填充后直接返回 PDF）
+- DOCX 模板填充（`{{变量名}}` 占位符；可选填充后直接返回 PDF）
 - Word（`.doc` / `.docx`）转 PDF
 - Docker 镜像打包运行
 
@@ -20,7 +20,7 @@ mvn clean package
 java -jar target/doc_server.jar
 ```
 
-服务默认端口：`8080`
+服务默认端口：`12012`
 
 若出现 `repo.maven.apache.org ... 403` 或 `present, but unavailable`：Maven 已把失败结果缓存在本地仓库。请先删掉对应目录再构建，例如：
 
@@ -46,7 +46,7 @@ mvn -U clean package -DskipTests
 示例：
 
 ```bash
-curl -X POST "http://localhost:8080/api/docs/fillTemplate" \
+curl -X POST "http://localhost:12012/api/docs/fillTemplate" \
   -F "template=@./template.docx" \
   -F 'variables={"name":"张三","amount":"1000"}'
 ```
@@ -54,7 +54,7 @@ curl -X POST "http://localhost:8080/api/docs/fillTemplate" \
 填充并直接下载 PDF：
 
 ```bash
-curl -X POST "http://localhost:8080/api/docs/fillTemplate?convertToPdf=true" \
+curl -X POST "http://localhost:12012/api/docs/fillTemplate?convertToPdf=true" \
   -F "template=@./template.docx" \
   -F 'variables={"name":"张三","amount":"1000"}' \
   --output filled.pdf
@@ -67,7 +67,7 @@ curl -X POST "http://localhost:8080/api/docs/fillTemplate?convertToPdf=true" \
 - 请求体字段：`templateUrl`、`variables`；可选 `convertToPdf`（`true` 时返回 PDF）
 
 ```bash
-curl -X POST "http://localhost:8080/api/docs/fillTemplateFromUrl" \
+curl -X POST "http://localhost:12012/api/docs/fillTemplateFromUrl" \
   -H "Content-Type: application/json" \
   -d '{"templateUrl":"https://example.com/t.docx","variables":{"ownerName":"张三"},"convertToPdf":true}' \
   -o filled.pdf
@@ -83,7 +83,7 @@ curl -X POST "http://localhost:8080/api/docs/fillTemplateFromUrl" \
 示例：
 
 ```bash
-curl -X POST "http://localhost:8080/api/docs/wordToPdf" \
+curl -X POST "http://localhost:12012/api/docs/wordToPdf" \
   -F "file=@./sample.docx" \
   --output converted.pdf
 ```
@@ -108,7 +108,7 @@ docker build \
 运行容器：
 
 ```bash
-docker run --rm -p 8080:8080 doc-server:latest
+docker run --rm -p 12012:12012 doc-server:latest
 ```
 
 ## 注意事项

@@ -62,7 +62,7 @@ public class DocumentController {
 
     @Operation(
         summary = "模板填充（本地上传）",
-        description = "上传 .docx 模板与 variables JSON。模板内占位符推荐写法为 {{键名}}（与 JSON 字段名一致）；仍兼容旧版 ${键名}。"
+        description = "上传 .docx 模板与 variables JSON。模板内占位符为 {{键名}}，与 JSON 字段名一致。"
             + " 设置 convertToPdf=true 时服务端在填充后直接转 PDF 返回（分页与 Word 预览可能略有差异，属 LibreOffice 排版引擎与 Word 不一致所致）。"
     )
     @ApiResponses({
@@ -89,7 +89,7 @@ public class DocumentController {
         @Parameter(description = "Word 模板文件（.docx）", required = true, schema = @Schema(type = "string", format = "binary"))
         @RequestPart("template") @NotNull MultipartFile template,
         @Parameter(
-            description = "占位符 JSON 对象，如 {\"plateNum\":\"云A12345\"}，对应模板中的 {{plateNum}}（亦兼容 ${plateNum}）",
+            description = "占位符 JSON 对象，如 {\"plateNum\":\"云A12345\"}，对应模板中的 {{plateNum}}",
             required = true,
             example = "{\"customerName\":\"示例客户\",\"amount\":\"1000\"}"
         )
@@ -104,7 +104,7 @@ public class DocumentController {
 
     @Operation(
         summary = "模板填充（模板 http 直链）",
-        description = "通过 http(s) 下载 .docx 模板，使用请求体中的 variables 映射替换 {{键}}（并兼容 ${键}）。"
+        description = "通过 http(s) 下载 .docx 模板，使用请求体中的 variables 映射替换 {{键}}。"
             + " convertToPdf 为 true 时直接返回 PDF。分页与 Word 可能不一致，原因见「模板填充（本地上传）」说明。"
     )
     @ApiResponses({

@@ -20,8 +20,7 @@ import org.springframework.stereotype.Service;
 public class DocTemplateService {
 
     /**
-     * 将模板中的占位符替换为 map 中的值。
-     * 支持 {@code {{键名}}}（推荐）与历史兼容的 {@code ${键名}}；map 的 key 不要包含花括号或 {@code $}。
+     * 将模板中的占位符替换为 map 中的值；占位符为 {@code {{键名}}}，与 map 的 key 一致（不要带花括号）。
      */
     public byte[] fillTemplate(InputStream templateInput, Map<String, String> variables) throws IOException {
         try (XWPFDocument document = new XWPFDocument(templateInput);
@@ -98,7 +97,6 @@ public class DocTemplateService {
         for (Map.Entry<String, String> entry : variables.entrySet()) {
             String value = entry.getValue() == null ? "" : entry.getValue();
             replaced = replaced.replace("{{" + entry.getKey() + "}}", value);
-            replaced = replaced.replace("${" + entry.getKey() + "}", value);
         }
         return replaced;
     }
