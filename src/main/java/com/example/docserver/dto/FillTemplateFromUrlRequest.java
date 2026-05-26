@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import java.util.Map;
+import java.util.Map;
 
 @Schema(description = "通过模板直链填充 Word：提供 http(s) 模板地址与占位符键值（键对应模板中的 {{键}}）")
 public record FillTemplateFromUrlRequest(
@@ -14,12 +15,12 @@ public record FillTemplateFromUrlRequest(
     String templateUrl,
 
     @Schema(
-        description = "占位符映射：key 会替换模板中的 {{key}}；值为 null 时按空字符串处理",
+        description = "占位符映射：key 会替换模板中的 {{key}}；值支持字符串、数字、布尔、数组等，服务端会转成文本后填充",
         requiredMode = Schema.RequiredMode.REQUIRED,
         example = "{\"plateNum\":\"云A12345\",\"plateColor\":\"黄色\",\"ownerName\":\"张三\"}"
     )
     @NotNull(message = "variables 不能为空")
-    Map<String, String> variables,
+    Map<String, Object> variables,
 
     @Schema(
         description = "为 true 时填充后由服务端直接转为 PDF 下载；省略或 false 则返回 Word（.docx）",

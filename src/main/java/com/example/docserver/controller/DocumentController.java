@@ -97,7 +97,7 @@ public class DocumentController {
         @Parameter(description = "为 true 时填充后直接返回 PDF；可放在 form 字段或查询参数", example = "false")
         @RequestParam(value = "convertToPdf", defaultValue = "false") boolean convertToPdf
     ) throws IOException, OfficeException {
-        Map<String, String> variables = objectMapper.readValue(variablesJson, new TypeReference<>() {});
+        Map<String, Object> variables = objectMapper.readValue(variablesJson, new TypeReference<>() {});
         byte[] docx = docTemplateService.fillTemplate(template.getInputStream(), variables);
         return fillResultAsDocxOrPdf(docx, convertToPdf);
     }
