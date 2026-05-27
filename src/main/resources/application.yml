@@ -16,6 +16,10 @@ knife4j:
 
 # Word → PDF（LibreOffice）；可按环境微调，改后需重启
 doc:
+  template:
+    http:
+      connect-timeout: 5s
+      read-timeout: 20s
   conversion:
     pdf:
       # SelectPdfVersion：0 多为 PDF 1.4；与镜像中 LibreOffice 版本有关，异常时可改为 0

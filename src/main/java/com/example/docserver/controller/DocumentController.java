@@ -20,6 +20,8 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.Map;
 import org.jodconverter.core.office.OfficeException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -39,6 +41,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping("/api/docs")
 public class DocumentController {
 
+    private static final Logger log = LoggerFactory.getLogger(DocumentController.class);
     private static final MediaType DOCX_MEDIA = MediaType.parseMediaType(
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     );
@@ -129,13 +132,41 @@ public class DocumentController {
     )
     public ResponseEntity<byte[]> fillTemplateFromUrl(@Valid @RequestBody FillTemplateFromUrlRequest body)
         throws IOException, OfficeException {
+        long start = System.nanoTime();
+        log.info(
+            "Received fillTemplateFromUrl request, templateUrl={}, variableCount={}, convertToPdf={}",
+            body.templateUrl(),
+            body.variables() == null ? 0 : body.variables().size(),
+            Boolean.TRUE.equals(body.convertToPdf())
+        );
         byte[] templateBytes = httpTemplateLoader.fetchAsBytes(body.templateUrl());
+        log.info(
+            "Template bytes ready for fillTemplateFromUrl, templateUrl={}, bytes={}, elapsedMs={}",
+            body.templateUrl(),
+            templateBytes.length,
+            elapsedMillis(start)
+        );
         byte[] docx;
         try (ByteArrayInputStream in = new ByteArrayInputStream(templateBytes)) {
             docx = docTemplateService.fillTemplate(in, body.variables());
         }
         boolean asPdf = Boolean.TRUE.equals(body.convertToPdf());
-        return fillResultAsDocxOrPdf(docx, asPdf);
+        log.info(
+            "Template filled for fillTemplateFromUrl, templateUrl={}, docxBytes={}, convertToPdf={}, elapsedMs={}",
+            body.templateUrl(),
+            docx.length,
+            asPdf,
+            elapsedMillis(start)
+        );
+        ResponseEntity<byte[]> response = fillResultAsDocxOrPdf(docx, asPdf);
+        log.info(
+            "fillTemplateFromUrl finished, templateUrl={}, responseContentType={}, responseBytes={}, elapsedMs={}",
+            body.templateUrl(),
+            response.getHeaders().getContentType(),
+            response.getBody() == null ? 0 : response.getBody().length,
+            elapsedMillis(start)
+        );
+        return response;
     }
 
     @Operation(
@@ -183,5 +214,9 @@ public class DocumentController {
             return ".docx";
         }
         return filename.substring(filename.lastIndexOf('.'));
+    }
+
+    private static long elapsedMillis(long start) {
+        return (System.nanoTime() - start) / 1_000_000;
     }
 }
