@@ -2,8 +2,10 @@
 
 基于 Spring Boot 3.5.10 的文档处理服务，提供：
 
-- DOCX 模板填充（`{{变量名}}` 占位符；可选填充后直接返回 PDF）
+- DOCX 模板填充：`{{变量名}}` 标量占位符 + `{{list名.字段名}}` 表格列表展开
+- 填充后可选直接返回 PDF
 - Word（`.doc` / `.docx`）转 PDF
+- 模板可通过 HTTP 直链远程拉取
 - Docker 镜像打包运行
 
 ## 技术栈
@@ -34,16 +36,16 @@ mvn -U clean package -DskipTests
 
 ## API
 
-### 1) 模板填充（上传）
+### 1) 模板填充（本地上传）
 
 - URL: `POST /api/docs/fillTemplate`
 - Content-Type: `multipart/form-data`
 - 参数：
   - `template`: 模板文件（`.docx`）
-  - `variables`: JSON 字符串，例如 `{"plateNum":"云A12345","ownerName":"张三"}`（与模板中 `{{plateNum}}`、`{{ownerName}}` 对应）
+  - `variables`: JSON 字符串，例如 `{"plateNum":"京A12345","ownerName":"张三"}`
   - `convertToPdf`（可选，默认 `false`）：为 `true` 时服务端填充后**直接转 PDF** 下载；可作为 **form 字段**或 **URL 查询参数**（如 `?convertToPdf=true`）
 
-示例：
+#### 标量填充示例
 
 ```bash
 curl -X POST "http://localhost:12012/api/docs/fillTemplate" \
@@ -60,16 +62,53 @@ curl -X POST "http://localhost:12012/api/docs/fillTemplate?convertToPdf=true" \
   --output filled.pdf
 ```
 
-### 1b) 模板填充（模板 http 直链）
+#### 列表填充示例（表格行展开）
+
+模板表格中设置一行模板行，填入 `{{list变量名.字段名}}` 占位符。例如表格有 9 列，模板行单元格分别为：
+
+| `{{list.seq}}` | `{{list.companyName}}` | `{{list.plateNum}}` | `{{list.plateColor}}` | `{{list.vehicleType}}` | `{{list.terminalModel}}` | `{{list.platformStatus}}` | `{{list.installTime}}` | `{{list.result}}` |
+
+调用时在 `variables` JSON 中传入数组：
+
+```bash
+curl -X POST "http://localhost:12012/api/docs/fillTemplate" \
+  -F "template=@./template.docx" \
+  -F 'variables={
+    "unitName":"XX运输公司",
+    "list":[
+      {"seq":"1","companyName":"XX公司","plateNum":"京A12345","plateColor":"蓝色","vehicleType":"货车","terminalModel":"T100","platformStatus":"已接入","installTime":"2026-07-01","result":"合格"},
+      {"seq":"2","companyName":"YY公司","plateNum":"京B67890","plateColor":"黄色","vehicleType":"客车","terminalModel":"T200","platformStatus":"已接入","installTime":"2026-07-02","result":"合格"}
+    ]
+  }'
+```
+
+**规则**：
+- `variables` 中值为 `[{...}, {...}]`（对象数组）的 key 会被识别为列表变量
+- 服务会自动找到包含 `{{key.字段名}}` 的表格模板行，用第一条数据填充后，克隆出剩余行依次填入
+- 列表为空时，模板行会被删除
+- 标量变量（如 `{{unitName}}`）和列表变量可同时使用，互不影响
+
+### 1b) 模板填充（HTTP 直链）
 
 - URL: `POST /api/docs/fillTemplateFromUrl`
 - Content-Type: `application/json`
 - 请求体字段：`templateUrl`、`variables`；可选 `convertToPdf`（`true` 时返回 PDF）
 
+标量：
+
 ```bash
 curl -X POST "http://localhost:12012/api/docs/fillTemplateFromUrl" \
   -H "Content-Type: application/json" \
   -d '{"templateUrl":"https://example.com/t.docx","variables":{"ownerName":"张三"},"convertToPdf":true}' \
+  -o filled.pdf
+```
+
+列表（同样支持 `{{listKey.字段名}}`）：
+
+```bash
+curl -X POST "http://localhost:12012/api/docs/fillTemplateFromUrl" \
+  -H "Content-Type: application/json" \
+  -d '{"templateUrl":"https://example.com/t.docx","variables":{"list":[{"plateNum":"京A12345","ownerName":"张三"}]},"convertToPdf":true}' \
   -o filled.pdf
 ```
 
@@ -113,13 +152,11 @@ docker run --rm -p 12012:12012 doc-server:latest
 
 ## 注意事项
 
-- 模板填充当前是基础版替换逻辑，适合简单占位符场景。
-- **Word 里 2 页、转 PDF 变 3 页**：LibreOffice 与 Microsoft Word 不是同一套排版引擎；字体替换、行距/表格行高/分页规则不同都会导致页数变化。服务端已对 PDF 导出开启 **嵌入标准字体**、**打开文档后完整 Update（FULL_UPDATE）** 等选项，能减轻部分差异，但**仍无法保证与 Word 逐页一致**。若必须与 Word 打印一致，请在模板中略留余量、统一使用镜像内字体（如 Noto CJK）、在 Word 中**嵌入字体**，或采用「先下 docx 用 Word 另存为 PDF」。
-- 复杂样式/跨 run 占位符（Word 内部拆分）可在后续迭代中增强。
-- 转换能力依赖 LibreOffice；Docker 镜像中已安装 `fonts-noto-cjk` 与 `fontconfig`，避免 PDF 中文变成方框。
-- PDF 导出参数可在 `application.yml` 的 `doc.conversion.pdf` 下调整（如 `select-pdf-version`、`full-update-on-load`），改后需重启服务。
+- 模板填充支持**标量**（`{{key}}`）和**列表**（`{{listKey.fieldName}}` 在表格中按行展开），两者可同时使用
+- 列表填充需要模板表格中存在一行包含 `{{listKey.xxx}}` 占位符的模板行；复杂格式/跨 run 占位符（Word 内部拆分）可在后续迭代中增强
+- **Word 里 2 页、转 PDF 后变 3 页**：LibreOffice 与 Microsoft Word 不是同一套排版引擎；字体替换、行距/表格行高/分页规则不同都会导致页数变化。服务端已对 PDF 导出开启**嵌入标准字体**、**打开文档后完整 Update（FULL_UPDATE）** 等选项，能减轻部分差异，但**仍无法保证与 Word 逐页一致**。若必须与 Word 打印一致，请在模板中略留余量、统一使用镜像内字体（如 Noto CJK）、在 Word 中**嵌入字体**，或采用「先生成 .docx 再用 Word 另存为 PDF」
+- 转换能力依赖 LibreOffice；Docker 镜像中已安装 `fonts-noto-cjk` 与 `fontconfig`，避免 PDF 中文变成方框
+- PDF 导出参数可在 `application.yml` 的 `doc.conversion.pdf` 下调整（如 `select-pdf-version`、`full-update-on-load`），改后需重启服务
+- 远程模板下载仅允许 `http/https` 协议，限制 20MB，含连接/读取超时保护
 
-
-
-
-如果转换格式有问题，或者 2 页转 pdf 后变成 3 也，请检查字符间距，字体，宋体 
+如果转换格式有问题，或者 2 页转 pdf 后变成 3 页，请检查字符间距，字体，宋体
