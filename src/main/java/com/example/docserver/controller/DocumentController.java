@@ -1,9 +1,11 @@
 package com.example.docserver.controller;
 
 import com.example.docserver.dto.FillTemplateFromUrlRequest;
+import com.example.docserver.dto.WordToPdfFromUrlRequest;
 import com.example.docserver.service.DocTemplateService;
 import com.example.docserver.service.HttpTemplateLoader;
 import com.example.docserver.service.WordConvertService;
+import com.example.docserver.util.FileUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.v3.oas.annotations.Operation;
@@ -18,12 +20,16 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 import org.jodconverter.core.office.OfficeException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -34,6 +40,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 @Tag(name = "文档处理", description = "Word 模板填充、Word 转 PDF")
 @Validated
@@ -194,6 +201,75 @@ public class DocumentController {
             .body(output);
     }
 
+    @Operation(
+        summary = "Word 填充并转 PDF（HTTP 直链）",
+        description = "通过 http(s) 下载 Word；请求体传 variables 时先替换 {{键}}，再使用 FileUtil.wordToPdf 转为 PDF 并返回。"
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "转换成功", content = @Content(mediaType = "application/pdf")),
+        @ApiResponse(responseCode = "400", description = "Word 链接非法、文件过大或转换失败"),
+        @ApiResponse(responseCode = "502", description = "Word 链接不可达")
+    })
+    @PostMapping(
+        value = "/wordToPdfFromUrl",
+        consumes = MediaType.APPLICATION_JSON_VALUE,
+        produces = MediaType.APPLICATION_PDF_VALUE
+    )
+    public ResponseEntity<byte[]> wordToPdfFromUrl(@Valid @RequestBody WordToPdfFromUrlRequest body) throws IOException {
+        long start = System.nanoTime();
+        log.info(
+            "Received wordToPdfFromUrl request, wordUrl={}, variableCount={}",
+            body.wordUrl(),
+            body.variables() == null ? 0 : body.variables().size()
+        );
+        byte[] wordBytes = httpTemplateLoader.fetchAsBytes(body.wordUrl());
+        String originalSuffix = resolveUrlSuffix(body.wordUrl());
+        boolean fillVariables = body.variables() != null && !body.variables().isEmpty();
+        if (fillVariables && !".docx".equalsIgnoreCase(originalSuffix)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "字段填充仅支持 .docx 模板");
+        }
+        byte[] sourceBytes = wordBytes;
+        String sourceSuffix = originalSuffix;
+        if (fillVariables) {
+            try (ByteArrayInputStream in = new ByteArrayInputStream(wordBytes)) {
+                sourceBytes = docTemplateService.fillTemplate(in, body.variables());
+            }
+            sourceSuffix = ".docx";
+            log.info(
+                "Word template filled for wordToPdfFromUrl, wordUrl={}, sourceBytes={}, filledBytes={}, elapsedMs={}",
+                body.wordUrl(),
+                wordBytes.length,
+                sourceBytes.length,
+                elapsedMillis(start)
+            );
+        }
+        Path sourceFile = Files.createTempFile("word-url-src-", sourceSuffix);
+        Path targetFile = Files.createTempFile("word-url-pdf-", ".pdf");
+        try {
+            Files.write(sourceFile, sourceBytes);
+            FileUtil.wordToPdf(targetFile.toString(), sourceFile.toString());
+            if (!Files.exists(targetFile) || Files.size(targetFile) == 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Word 转 PDF 失败，未生成有效 PDF 文件");
+            }
+            byte[] output = Files.readAllBytes(targetFile);
+            log.info(
+                "wordToPdfFromUrl finished, wordUrl={}, wordBytes={}, filled={}, pdfBytes={}, elapsedMs={}",
+                body.wordUrl(),
+                wordBytes.length,
+                fillVariables,
+                output.length,
+                elapsedMillis(start)
+            );
+            return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename("converted.pdf").build().toString())
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(output);
+        } finally {
+            Files.deleteIfExists(sourceFile);
+            Files.deleteIfExists(targetFile);
+        }
+    }
+
     private ResponseEntity<byte[]> fillResultAsDocxOrPdf(byte[] docxBytes, boolean convertToPdf)
         throws IOException, OfficeException {
         if (!convertToPdf) {
@@ -214,6 +290,13 @@ public class DocumentController {
             return ".docx";
         }
         return filename.substring(filename.lastIndexOf('.'));
+    }
+
+    private String resolveUrlSuffix(String fileUrl) {
+        String path = URI.create(fileUrl).getPath();
+        int slashIndex = path.lastIndexOf('/');
+        String filename = slashIndex >= 0 ? path.substring(slashIndex + 1) : path;
+        return resolveSuffix(filename);
     }
 
     private static long elapsedMillis(long start) {
