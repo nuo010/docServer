@@ -15,6 +15,10 @@ RUN apt-get update \
     && fc-cache -fv \
     && rm -rf /var/lib/apt/lists/*
 
+COPY ./fonts /usr/share/fonts
+RUN chmod -R 755 /usr/share/fonts \
+    && fc-cache -fv
+
 
 #ADD ./ /code
 ADD doc_server.jar /code/doc_server.jar

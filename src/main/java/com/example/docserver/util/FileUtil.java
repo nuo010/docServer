@@ -36,6 +36,10 @@ public class FileUtil {
                 log.error("License验证不通过...");
             }
             //生成一个空的PDF文件
+            String osName = System.getProperty("os.name");
+            if (osName != null && osName.toLowerCase().startsWith("linux")) {
+                FontSettings.setFontsFolder("/usr/share/fonts" + File.separator, true);
+            }
             File file = new File(pdfPath);
             os = new FileOutputStream(file);
             //要转换的word文件
