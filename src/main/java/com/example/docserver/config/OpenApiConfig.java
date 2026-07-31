@@ -14,7 +14,7 @@ public class OpenApiConfig {
             .info(
                 new Info()
                     .title("doc-server API")
-                    .description("文档处理：模板填充、Word 转 PDF")
+                    .description("文档处理服务：Word 模板填充与 Word 转 PDF")
                     .version("0.0.1")
             );
     }

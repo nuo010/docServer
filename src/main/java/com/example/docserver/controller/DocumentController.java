@@ -2,12 +2,8 @@ package com.example.docserver.controller;
 
 import com.example.docserver.dto.FillTemplateFromUrlRequest;
 import com.example.docserver.dto.WordToPdfFromUrlRequest;
-import com.example.docserver.service.DocTemplateService;
-import com.example.docserver.service.HttpTemplateLoader;
-import com.example.docserver.service.WordConvertService;
-import com.example.docserver.util.FileUtil;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.example.docserver.service.DocumentResult;
+import com.example.docserver.service.DocumentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -18,18 +14,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.net.URI;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Map;
 import org.jodconverter.core.office.OfficeException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -40,52 +28,34 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.server.ResponseStatusException;
 
-@Tag(name = "文档处理", description = "Word 模板填充、Word 转 PDF")
+@Tag(name = "文档处理", description = "Word 模板填充与 PDF 转换")
 @Validated
 @RestController
 @RequestMapping("/api/docs")
 public class DocumentController {
 
-    private static final Logger log = LoggerFactory.getLogger(DocumentController.class);
-    private static final MediaType DOCX_MEDIA = MediaType.parseMediaType(
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    );
+    private final DocumentService documentService;
 
-    private final DocTemplateService docTemplateService;
-    private final WordConvertService wordConvertService;
-    private final ObjectMapper objectMapper;
-    private final HttpTemplateLoader httpTemplateLoader;
-
-    public DocumentController(
-        DocTemplateService docTemplateService,
-        WordConvertService wordConvertService,
-        ObjectMapper objectMapper,
-        HttpTemplateLoader httpTemplateLoader
-    ) {
-        this.docTemplateService = docTemplateService;
-        this.wordConvertService = wordConvertService;
-        this.objectMapper = objectMapper;
-        this.httpTemplateLoader = httpTemplateLoader;
+    public DocumentController(DocumentService documentService) {
+        this.documentService = documentService;
     }
 
     @Operation(
         summary = "模板填充（本地上传）",
-        description = "上传 .docx 模板与 variables JSON。模板内占位符为 {{键名}}，与 JSON 字段名一致。"
-            + " 设置 convertToPdf=true 时服务端在填充后直接转 PDF 返回（分页与 Word 预览可能略有差异，属 LibreOffice 排版引擎与 Word 不一致所致）。"
+        description = "上传 DOCX 模板和 variables JSON，替换模板中的占位符。"
     )
     @ApiResponses({
         @ApiResponse(
             responseCode = "200",
-            description = "填充成功；convertToPdf=false 时为 Word，为 true 时为 PDF",
+            description = "填充成功。convertToPdf 为 false 时返回 DOCX，为 true 时返回 PDF。",
             content = {
                 @Content(mediaType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
                 @Content(mediaType = "application/pdf")
             }
         ),
-        @ApiResponse(responseCode = "400", description = "参数校验失败或 JSON 无法解析"),
-        @ApiResponse(responseCode = "502", description = "选择转 PDF 时 LibreOffice 转换失败")
+        @ApiResponse(responseCode = "400", description = "请求参数无效或 variables JSON 格式错误"),
+        @ApiResponse(responseCode = "502", description = "PDF 转换失败")
     })
     @PostMapping(
         value = "/fillTemplate",
@@ -98,36 +68,22 @@ public class DocumentController {
     public ResponseEntity<byte[]> fillTemplate(
         @Parameter(description = "Word 模板文件（.docx）", required = true, schema = @Schema(type = "string", format = "binary"))
         @RequestPart("template") @NotNull MultipartFile template,
-        @Parameter(
-            description = "占位符 JSON 对象，如 {\"plateNum\":\"云A12345\"}，对应模板中的 {{plateNum}}",
-            required = true,
-            example = "{\"customerName\":\"示例客户\",\"amount\":\"1000\"}"
-        )
+        @Parameter(description = "占位符变量 JSON 对象", required = true, example = "{\"customerName\":\"示例客户\",\"amount\":\"1000\"}")
         @RequestPart("variables") @NotBlank String variablesJson,
-        @Parameter(description = "为 true 时填充后直接返回 PDF；可放在 form 字段或查询参数", example = "false")
+        @Parameter(description = "为 true 时返回 PDF，否则返回填充后的 Word 文件", example = "false")
         @RequestParam(value = "convertToPdf", defaultValue = "false") boolean convertToPdf
     ) throws IOException, OfficeException {
-        Map<String, Object> variables = objectMapper.readValue(variablesJson, new TypeReference<>() {});
-        byte[] docx = docTemplateService.fillTemplate(template.getInputStream(), variables);
-        return fillResultAsDocxOrPdf(docx, convertToPdf);
+        return toResponse(documentService.fillTemplate(template, variablesJson, convertToPdf));
     }
 
     @Operation(
-        summary = "模板填充（模板 http 直链）",
-        description = "通过 http(s) 下载 .docx 模板，使用请求体中的 variables 映射替换 {{键}}。"
-            + " convertToPdf 为 true 时直接返回 PDF。分页与 Word 可能不一致，原因见「模板填充（本地上传）」说明。"
+        summary = "模板填充（HTTP 直链）",
+        description = "通过 HTTP 或 HTTPS 下载 DOCX 模板，并使用 variables 替换模板中的占位符。"
     )
     @ApiResponses({
-        @ApiResponse(
-            responseCode = "200",
-            description = "填充成功；convertToPdf 为 false 或未传时为 Word，为 true 时为 PDF",
-            content = {
-                @Content(mediaType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
-                @Content(mediaType = "application/pdf")
-            }
-        ),
-        @ApiResponse(responseCode = "400", description = "链接非法、模板过大或校验失败"),
-        @ApiResponse(responseCode = "502", description = "模板链接不可达或转 PDF 失败")
+        @ApiResponse(responseCode = "200", description = "模板填充成功"),
+        @ApiResponse(responseCode = "400", description = "模板地址或请求参数无效"),
+        @ApiResponse(responseCode = "502", description = "模板下载或 PDF 转换失败")
     })
     @PostMapping(
         value = "/fillTemplateFromUrl",
@@ -139,50 +95,16 @@ public class DocumentController {
     )
     public ResponseEntity<byte[]> fillTemplateFromUrl(@Valid @RequestBody FillTemplateFromUrlRequest body)
         throws IOException, OfficeException {
-        long start = System.nanoTime();
-        log.info(
-            "Received fillTemplateFromUrl request, templateUrl={}, variableCount={}, convertToPdf={}",
-            body.templateUrl(),
-            body.variables() == null ? 0 : body.variables().size(),
-            Boolean.TRUE.equals(body.convertToPdf())
-        );
-        byte[] templateBytes = httpTemplateLoader.fetchAsBytes(body.templateUrl());
-        log.info(
-            "Template bytes ready for fillTemplateFromUrl, templateUrl={}, bytes={}, elapsedMs={}",
-            body.templateUrl(),
-            templateBytes.length,
-            elapsedMillis(start)
-        );
-        byte[] docx;
-        try (ByteArrayInputStream in = new ByteArrayInputStream(templateBytes)) {
-            docx = docTemplateService.fillTemplate(in, body.variables());
-        }
-        boolean asPdf = Boolean.TRUE.equals(body.convertToPdf());
-        log.info(
-            "Template filled for fillTemplateFromUrl, templateUrl={}, docxBytes={}, convertToPdf={}, elapsedMs={}",
-            body.templateUrl(),
-            docx.length,
-            asPdf,
-            elapsedMillis(start)
-        );
-        ResponseEntity<byte[]> response = fillResultAsDocxOrPdf(docx, asPdf);
-        log.info(
-            "fillTemplateFromUrl finished, templateUrl={}, responseContentType={}, responseBytes={}, elapsedMs={}",
-            body.templateUrl(),
-            response.getHeaders().getContentType(),
-            response.getBody() == null ? 0 : response.getBody().length,
-            elapsedMillis(start)
-        );
-        return response;
+        return toResponse(documentService.fillTemplateFromUrl(body));
     }
 
     @Operation(
         summary = "Word 转 PDF",
-        description = "上传 .doc 或 .docx，服务端通过 LibreOffice 转为 PDF 并返回。"
+        description = "上传 Word 文件，通过 LibreOffice 转换为 PDF 并返回。"
     )
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "转换成功", content = @Content(mediaType = "application/pdf")),
-        @ApiResponse(responseCode = "400", description = "文档格式不支持或转换失败")
+        @ApiResponse(responseCode = "400", description = "文件格式不支持或转换失败")
     })
     @PostMapping(
         value = "/wordToPdf",
@@ -193,113 +115,35 @@ public class DocumentController {
         @Parameter(description = "待转换的 Word 文件", required = true, schema = @Schema(type = "string", format = "binary"))
         @RequestPart("file") @NotNull MultipartFile file
     ) throws IOException, OfficeException {
-        String suffix = resolveSuffix(file.getOriginalFilename());
-        byte[] output = wordConvertService.convertToPdf(file.getInputStream(), suffix);
-        return ResponseEntity.ok()
-            .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename("converted.pdf").build().toString())
-            .contentType(MediaType.APPLICATION_PDF)
-            .body(output);
+        return toResponse(documentService.wordToPdf(file));
     }
 
     @Operation(
-        summary = "Word 填充并转 PDF（HTTP 直链）",
-        description = "通过 http(s) 下载 Word；请求体传 variables 时先替换 {{键}}，再使用 FileUtil.wordToPdf 转为 PDF 并返回。"
+        summary = "Word 模板填充并转 PDF（HTTP 直链）",
+        description = "通过 HTTP 或 HTTPS 下载 Word 文件；传入 variables 时先填充 DOCX 模板，再转换为 PDF。"
     )
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "转换成功", content = @Content(mediaType = "application/pdf")),
-        @ApiResponse(responseCode = "400", description = "Word 链接非法、文件过大或转换失败"),
-        @ApiResponse(responseCode = "502", description = "Word 链接不可达")
+        @ApiResponse(responseCode = "400", description = "Word 地址、模板或转换参数无效"),
+        @ApiResponse(responseCode = "502", description = "Word 文件下载失败")
     })
     @PostMapping(
         value = "/wordToPdfFromUrl",
         consumes = MediaType.APPLICATION_JSON_VALUE,
         produces = MediaType.APPLICATION_PDF_VALUE
     )
-    public ResponseEntity<byte[]> wordToPdfFromUrl(@Valid @RequestBody WordToPdfFromUrlRequest body) throws IOException {
-        long start = System.nanoTime();
-        log.info(
-            "Received wordToPdfFromUrl request, wordUrl={}, variableCount={}",
-            body.wordUrl(),
-            body.variables() == null ? 0 : body.variables().size()
-        );
-        byte[] wordBytes = httpTemplateLoader.fetchAsBytes(body.wordUrl());
-        String originalSuffix = resolveUrlSuffix(body.wordUrl());
-        boolean fillVariables = body.variables() != null && !body.variables().isEmpty();
-        if (fillVariables && !".docx".equalsIgnoreCase(originalSuffix)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "字段填充仅支持 .docx 模板");
-        }
-        byte[] sourceBytes = wordBytes;
-        String sourceSuffix = originalSuffix;
-        if (fillVariables) {
-            try (ByteArrayInputStream in = new ByteArrayInputStream(wordBytes)) {
-                sourceBytes = docTemplateService.fillTemplate(in, body.variables());
-            }
-            sourceSuffix = ".docx";
-            log.info(
-                "Word template filled for wordToPdfFromUrl, wordUrl={}, sourceBytes={}, filledBytes={}, elapsedMs={}",
-                body.wordUrl(),
-                wordBytes.length,
-                sourceBytes.length,
-                elapsedMillis(start)
-            );
-        }
-        Path sourceFile = Files.createTempFile("word-url-src-", sourceSuffix);
-        Path targetFile = Files.createTempFile("word-url-pdf-", ".pdf");
-        try {
-            Files.write(sourceFile, sourceBytes);
-            FileUtil.wordToPdf(targetFile.toString(), sourceFile.toString());
-            if (!Files.exists(targetFile) || Files.size(targetFile) == 0) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Word 转 PDF 失败，未生成有效 PDF 文件");
-            }
-            byte[] output = Files.readAllBytes(targetFile);
-            log.info(
-                "wordToPdfFromUrl finished, wordUrl={}, wordBytes={}, filled={}, pdfBytes={}, elapsedMs={}",
-                body.wordUrl(),
-                wordBytes.length,
-                fillVariables,
-                output.length,
-                elapsedMillis(start)
-            );
-            return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename("converted.pdf").build().toString())
-                .contentType(MediaType.APPLICATION_PDF)
-                .body(output);
-        } finally {
-            Files.deleteIfExists(sourceFile);
-            Files.deleteIfExists(targetFile);
-        }
-    }
-
-    private ResponseEntity<byte[]> fillResultAsDocxOrPdf(byte[] docxBytes, boolean convertToPdf)
+    public ResponseEntity<byte[]> wordToPdfFromUrl(@Valid @RequestBody WordToPdfFromUrlRequest body)
         throws IOException, OfficeException {
-        if (!convertToPdf) {
-            return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename("filled-template.docx").build().toString())
-                .contentType(DOCX_MEDIA)
-                .body(docxBytes);
-        }
-        byte[] pdf = wordConvertService.convertToPdf(new ByteArrayInputStream(docxBytes), ".docx");
+        return toResponse(documentService.wordToPdfFromUrl(body));
+    }
+
+    private static ResponseEntity<byte[]> toResponse(DocumentResult result) {
         return ResponseEntity.ok()
-            .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename("filled-template.pdf").build().toString())
-            .contentType(MediaType.APPLICATION_PDF)
-            .body(pdf);
-    }
-
-    private String resolveSuffix(String filename) {
-        if (filename == null || !filename.contains(".")) {
-            return ".docx";
-        }
-        return filename.substring(filename.lastIndexOf('.'));
-    }
-
-    private String resolveUrlSuffix(String fileUrl) {
-        String path = URI.create(fileUrl).getPath();
-        int slashIndex = path.lastIndexOf('/');
-        String filename = slashIndex >= 0 ? path.substring(slashIndex + 1) : path;
-        return resolveSuffix(filename);
-    }
-
-    private static long elapsedMillis(long start) {
-        return (System.nanoTime() - start) / 1_000_000;
+            .header(
+                HttpHeaders.CONTENT_DISPOSITION,
+                ContentDisposition.attachment().filename(result.filename()).build().toString()
+            )
+            .contentType(result.mediaType())
+            .body(result.content());
     }
 }
